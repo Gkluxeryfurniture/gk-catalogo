@@ -242,7 +242,7 @@ async function loadProducts(){
   try{
     const r=await fetch(SB_URL+'/rest/v1/products?active=eq.true&order=created_at.desc&select=*',{headers:{apikey:SB_KEY}});
     const rows=await r.json();
-    if(Array.isArray(rows)&&rows.length){
+    if(Array.isArray(rows)){
       products=rows.map(p=>({id:String(p.id),name:p.name,sku:'—',price:Number(p.price),img:p.image_url||''}));
     }
   }catch(e){}
@@ -253,6 +253,7 @@ let cart = {};
 
 function renderGrid(){
   const grid = document.getElementById('grid');
+  if(!products.length){ grid.innerHTML='<p style="grid-column:1/-1;text-align:center;color:var(--muted);padding:40px 0">Pronto tendremos nuevas piezas. Escríbenos por WhatsApp.</p>'; document.getElementById('itemCount').textContent='0 piezas'; return; }
   grid.innerHTML = products.map(p => `
     <div class="card">
       <div class="thumb"><img src="${p.img}" alt="${p.name}" loading="lazy"></div>
