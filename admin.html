@@ -23,7 +23,7 @@ button:disabled{opacity:.5}
 .item .t{flex:1;min-width:0}.item .n{font-weight:600}.item .p{color:var(--gold);font-size:14px}
 .off{opacity:.45}
 #msg{position:fixed;left:12px;right:12px;bottom:12px;background:var(--sf);border:1px solid var(--gold);padding:12px;border-radius:10px;display:none;text-align:center}
-#prev{max-width:100%;max-height:180px;border-radius:8px;display:none;margin-bottom:10px}
+.th{position:relative}.th img{width:64px;height:64px;object-fit:cover;border-radius:8px;display:block}.th b{position:absolute;top:-6px;right:-6px;background:var(--bad);color:#fff;border-radius:50%;width:20px;height:20px;text-align:center;font-size:12px;line-height:20px;cursor:pointer}
 .hide{display:none}
 </style>
 </head>
@@ -40,9 +40,9 @@ button:disabled{opacity:.5}
 <div id="app" class="hide">
   <div class="box">
     <h2 id="formTitle">Agregar producto</h2>
-    <label>Foto</label>
-    <img id="prev" alt="">
-    <input id="file" type="file" accept="image/*">
+    <label>Fotos (hasta 6, puedes elegir varias a la vez)</label>
+    <div id="thumbs" class="row" style="margin-bottom:10px"></div>
+    <input id="file" type="file" accept="image/*" multiple>
     <label>Nombre</label><input id="name" placeholder="Ej: Sala Gala">
     <label>Precio (COP, solo números)</label><input id="price" inputmode="numeric" placeholder="1880000">
     <label>Descripción (opcional)</label><textarea id="desc" rows="2"></textarea>
@@ -67,7 +67,7 @@ button:disabled{opacity:.5}
 const SB_URL='https://smkwmtrjgxpxhcvujnlh.supabase.co';
 const SB_KEY='sb_publishable_s_z3_STFixVx8bp660e78g_LUvwCY4O';
 const $=id=>document.getElementById(id);
-let token=null, editId=null, editImg=null, rows=[];
+let token=null, editId=null, keep=[], rows=[];
 
 function msg(t){const m=$('msg');m.textContent=t;m.style.display='block';clearTimeout(msg.t);msg.t=setTimeout(()=>m.style.display='none',3500)}
 const H=(extra={})=>({apikey:SB_KEY,Authorization:'Bearer '+token,...extra});
@@ -128,21 +128,27 @@ async function upload(blob){
   return SB_URL+'/storage/v1/object/public/productos/'+name;
 }
 
-$('file').addEventListener('change',e=>{
-  const f=e.target.files[0];if(!f)return;
-  $('prev').src=URL.createObjectURL(f);$('prev').style.display='block';
+function drawThumbs(){
+  const nf=[...$('file').files];
+  $('thumbs').innerHTML=keep.map((u,i)=>`<div class="th"><img src="${u}"><b onclick="rmKeep(${i})">×</b></div>`).join('')
+   +nf.map(f=>`<div class="th"><img src="${URL.createObjectURL(f)}"></div>`).join('');
+}
+function rmKeep(i){keep.splice(i,1);drawThumbs()}
+$('file').addEventListener('change',()=>{
+  if(keep.length+$('file').files.length>6){msg('Máximo 6 fotos');$('file').value=''}
+  drawThumbs();
 });
 
 async function save(){
   const name=$('name').value.trim(),price=Number($('price').value.replace(/\D/g,''));
-  const f=$('file').files[0];
+  const files=[...$('file').files];
   if(!name||!price){msg('Escribe el nombre y el precio');return}
-  if(!f&&!editId){msg('Elige una foto');return}
+  if(!files.length&&!keep.length){msg('Elige al menos una foto');return}
   $('btnSave').disabled=true;
   try{
-    let url=editImg;
-    if(f)url=await upload(await compress(f));
-    const body={name,price,description:$('desc').value.trim(),image_url:url};
+    const urls=[...keep];
+    for(let i=0;i<files.length;i++){msg('Subiendo foto '+(i+1)+' de '+files.length+'...');urls.push(await upload(await compress(files[i])))}
+    const body={name,price,description:$('desc').value.trim(),image_url:urls[0],images:urls};
     const r=editId
       ?await fetch(SB_URL+'/rest/v1/products?id=eq.'+editId,{method:'PATCH',headers:H({'Content-Type':'application/json',Prefer:'return=minimal'}),body:JSON.stringify(body)})
       :await fetch(SB_URL+'/rest/v1/products',{method:'POST',headers:H({'Content-Type':'application/json',Prefer:'return=minimal'}),body:JSON.stringify(body)});
@@ -153,16 +159,16 @@ async function save(){
   $('btnSave').disabled=false;
 }
 function reset(){
-  editId=null;editImg=null;
+  editId=null;keep=[];
   ['name','price','desc'].forEach(i=>$(i).value='');
-  $('file').value='';$('prev').style.display='none';
+  $('file').value='';drawThumbs();
   $('formTitle').textContent='Agregar producto';$('btnCancel').classList.add('hide');
 }
 function edit(id){
   const p=rows.find(x=>x.id===id);if(!p)return;
-  editId=id;editImg=p.image_url;
+  editId=id;keep=(p.images&&p.images.length?p.images:[p.image_url]).filter(Boolean);
   $('name').value=p.name;$('price').value=p.price;$('desc').value=p.description||'';
-  $('prev').src=p.image_url||'';$('prev').style.display=p.image_url?'block':'none';
+  $('file').value='';drawThumbs();
   $('formTitle').textContent='Editando: '+p.name;$('btnCancel').classList.remove('hide');
   scrollTo({top:0,behavior:'smooth'});
 }
@@ -190,7 +196,7 @@ async function importOld(){
       msg('Importando '+(++n)+' de '+list.length+'...');
       const blob=await (await fetch(p.img)).blob();
       const url=await upload(blob);
-      await fetch(SB_URL+'/rest/v1/products',{method:'POST',headers:H({'Content-Type':'application/json',Prefer:'return=minimal'}),body:JSON.stringify({name:p.name,price:p.price,image_url:url})});
+      await fetch(SB_URL+'/rest/v1/products',{method:'POST',headers:H({'Content-Type':'application/json',Prefer:'return=minimal'}),body:JSON.stringify({name:p.name,price:p.price,image_url:url,images:[url]})});
     }
     msg('Listo, '+list.length+' productos importados');load();
   }catch(e){msg(e.message||'Error al importar')}

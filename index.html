@@ -92,6 +92,11 @@
   }
   .card .thumb{ aspect-ratio:1/1; overflow:hidden; background:var(--surface-2); }
   .card .thumb img{ width:100%; height:100%; object-fit:cover; }
+  .card .thumb{ position:relative; }
+  .gal{ display:flex; overflow-x:auto; scroll-snap-type:x mandatory; height:100%; scrollbar-width:none; }
+  .gal::-webkit-scrollbar{ display:none; }
+  .gal img{ flex:0 0 100%; scroll-snap-align:center; height:100%; object-fit:cover; }
+  .cnt{ position:absolute; right:8px; bottom:8px; background:rgba(0,0,0,.65); color:#fff; font-size:11px; padding:2px 8px; border-radius:10px; pointer-events:none; }
   .card .body{ padding:11px 12px 13px; display:flex; flex-direction:column; gap:6px; flex:1; }
   .card .name{ font-family:'Fraunces',serif; font-size:15px; line-height:1.2; }
   .card .sku{ font-size:11px; color:var(--muted); }
@@ -243,7 +248,7 @@ async function loadProducts(){
     const r=await fetch(SB_URL+'/rest/v1/products?active=eq.true&order=created_at.desc&select=*',{headers:{apikey:SB_KEY}});
     const rows=await r.json();
     if(Array.isArray(rows)){
-      products=rows.map(p=>({id:String(p.id),name:p.name,sku:'—',price:Number(p.price),img:p.image_url||''}));
+      products=rows.map(p=>({id:String(p.id),name:p.name,sku:'—',price:Number(p.price),img:p.image_url||'',imgs:(p.images&&p.images.length?p.images:[p.image_url||''])}));
     }
   }catch(e){}
   renderGrid(); updateCartUI();
@@ -256,7 +261,7 @@ function renderGrid(){
   if(!products.length){ grid.innerHTML='<p style="grid-column:1/-1;text-align:center;color:var(--muted);padding:40px 0">Pronto tendremos nuevas piezas. Escríbenos por WhatsApp.</p>'; document.getElementById('itemCount').textContent='0 piezas'; return; }
   grid.innerHTML = products.map(p => `
     <div class="card">
-      <div class="thumb"><img src="${p.img}" alt="${p.name}" loading="lazy"></div>
+      <div class="thumb"><div class="gal">${(p.imgs&&p.imgs.length?p.imgs:[p.img]).map(u=>`<img src="${u}" alt="${p.name}" loading="lazy">`).join('')}</div>${p.imgs&&p.imgs.length>1?`<span class="cnt">1/${p.imgs.length}</span>`:''}</div>
       <div class="body">
         <div class="name">${p.name}</div>
         <div class="sku">${p.sku !== '—' ? 'SKU ' + p.sku : 'Pieza única'}</div>
@@ -267,6 +272,10 @@ function renderGrid(){
     </div>
   `).join('');
   document.getElementById('itemCount').textContent = products.length + ' piezas';
+  grid.querySelectorAll('.gal').forEach(g=>g.addEventListener('scroll',()=>{
+    const c=g.parentElement.querySelector('.cnt'); if(!c) return;
+    c.textContent=(Math.round(g.scrollLeft/g.clientWidth)+1)+'/'+g.children.length;
+  },{passive:true}));
   grid.querySelectorAll('.add').forEach(btn => btn.addEventListener('click', () => {
     addToCart(btn.dataset.id);
     btn.classList.add('added'); btn.textContent = 'Añadido ✓';
